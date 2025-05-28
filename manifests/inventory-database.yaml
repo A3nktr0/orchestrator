@@ -1,0 +1,88 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: inventory-db
+  name: inventory-db
+spec:
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432
+  selector:
+    app: inventory-db
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app: inventory-db
+  name: inventory-db
+spec:
+  serviceName: "inventory-db"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inventory-db
+  template:
+    metadata:
+      labels:
+        app: inventory-db
+    spec:
+      containers:
+        - name: inventory-db
+          image: a3nktr0/inventory-database:latest
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: orchestrator-secrets
+                  key: INVENTORY_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: orchestrator-secrets
+                  key: INVENTORY_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: orchestrator-secrets
+                  key: INVENTORY_DB_NAME
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+            failureThreshold: 5
+            periodSeconds: 3
+            timeoutSeconds: 1
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+            failureThreshold: 5
+            periodSeconds: 3
+            timeoutSeconds: 1
+          ports:
+            - containerPort: 5432
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /var/lib/postgresql/data
+              name: inventory-db
+      restartPolicy: Always
+      volumes:
+        - name: inventory-db
+          persistentVolumeClaim:
+            claimName: inventory-db
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  labels:
+    service: inventory-db
+  name: inventory-db
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi
